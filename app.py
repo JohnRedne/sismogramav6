@@ -88,8 +88,17 @@ def generate_sismograma():
         fig, ax = plt.subplots(figsize=(12, 6))
 
         # Convertir fechas de recorte a UTCDateTime
-        start_utc = UTCDateTime(start_date)
-        end_utc = UTCDateTime(end_date)
+        #start_utc = UTCDateTime(start_date)
+        #end_utc = UTCDateTime(end_date)
+
+        # Asegurar que start_date y end_date sean naive
+        start_date = start_date.replace(tzinfo=None)
+        end_date = end_date.replace(tzinfo=None)
+
+        # Convertir fechas de recorte a UTCDateTime (obspy usa UTC)
+        start_utc = UTCDateTime(start_date.isoformat() + "Z")
+        end_utc = UTCDateTime(end_date.isoformat() + "Z")
+
 
         # Recortar los datos al intervalo definido por el usuario
         stream = stream.slice(starttime=start_utc, endtime=end_utc)
