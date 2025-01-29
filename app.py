@@ -21,7 +21,7 @@ app = Flask(__name__)
 # Función para convertir una fecha ISO8601 a día juliano
 def date_to_julian_day(date: str) -> int:
     """Convierte una fecha ISO8601 al día juliano del año."""
-    dt = datetime.fromisoformat(date)
+    dt = datetime.fromisoformat(date).replace(tzinfo=None)  # Eliminar zona horaria si existe
     start_of_year = datetime(dt.year, 1, 1)
     julian_day = (dt - start_of_year).days + 1
     return julian_day
@@ -45,8 +45,8 @@ def generate_sismograma():
 
         # Validar formato de las fechas
         try:
-            start_date = datetime.fromisoformat(start_date_input)
-            end_date = datetime.fromisoformat(end_date_input)
+            start_date = datetime.fromisoformat(start_date_input).replace(tzinfo=None)  # Eliminar zona horaria
+            end_date = datetime.fromisoformat(end_date_input).replace(tzinfo=None)    # Eliminar zona horaria
         except ValueError:
             return jsonify({"error": "El formato de la fecha debe ser ISO8601 (ej: 2024-12-30T21:01:00)."}), 400
 
