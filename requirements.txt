@@ -3,3 +3,7 @@ obspy
 requests
 matplotlib
 gunicorn
+flask-cors
+numpy
+scipy
+pytz
