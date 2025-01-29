@@ -15,9 +15,11 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from datetime import datetime, timedelta
 import os
+from flask_cors import CORS
+
 
 app = Flask(__name__)
-
+CORS(app)  # Habilita CORS en todas las rutas
 # Función para convertir una fecha ISO8601 a día juliano
 def date_to_julian_day(date: str) -> tuple:
     """Convierte una fecha ISO8601 al día juliano del año y devuelve el DOY y año."""
