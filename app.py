@@ -18,82 +18,78 @@ import os
 
 app = Flask(__name__)
 
-# Función para convertir fecha a día juliano
-def date_to_julian_day(date: str) -> int:
-    dt = datetime.fromisoformat(date)
-    start_of_year = datetime(dt.year, 1, 1)
-    julian_day = (dt - start_of_year).days + 1
-    return julian_day
+# 🔹 **Función para convertir una fecha en día juliano**
+def date_to_julian_day(date: datetime) -> int:
+    """Convierte una fecha en el día juliano del año."""
+    start_of_year = datetime(date.year, 1, 1)
+    return (date - start_of_year).days + 1
 
+# 🔹 **Ruta raíz para verificar que el backend funciona**
 @app.route('/')
 def home():
     return jsonify({"message": "El backend está funcionando correctamente"}), 200
 
+# 🔹 **Ruta principal para generar el sismograma**
 @app.route('/generate_sismograma', methods=['GET'])
 def generate_sismograma():
     try:
-        # Obtener los parámetros de la solicitud
-        start_date_input = request.args.get("start")
-        end_date_input = request.args.get("end")
-        net = request.args.get("net")
-        sta = request.args.get("sta")
+        # 📌 **1. Extraer los parámetros enviados desde la app Flutter (`url_build.dart`)**
+        start_date_input = request.args.get("start")  # Fecha inicio
+        end_date_input = request.args.get("end")      # Fecha fin
+        net = request.args.get("net")                 # Red (ej. UX)
+        sta = request.args.get("sta")                 # Estación (ej. UIS01)
 
-        # Canal fijo (por ahora)
-        channel = "HNE.D"
+        # 📌 **2. Definir el canal de datos**
+        channel = "HNE.D"  # Canal fijo por ahora
         color = "blue"
 
-        # Validar que todos los parámetros estén presentes
+        # 📌 **3. Validar que todos los parámetros existen**
         if not all([start_date_input, end_date_input, net, sta]):
             return jsonify({"error": "Faltan parámetros requeridos (start, end, net, sta)."}), 400
 
-        # Convertir a datetime y eliminar información de zona horaria (quitar 'Z')
+        # 📌 **4. Convertir fechas ISO8601 a formato `datetime`**
         try:
-            start_date = datetime.fromisoformat(start_date_input.replace("Z", ""))
-            end_date = datetime.fromisoformat(end_date_input.replace("Z", ""))
+            start_date = datetime.strptime(start_date_input, "%Y-%m-%dT%H:%M:%SZ")
+            end_date = datetime.strptime(end_date_input, "%Y-%m-%dT%H:%M:%SZ")
         except ValueError:
-            return jsonify({"error": "Formato incorrecto de fecha (usar ISO8601)."}), 400
+            return jsonify({"error": "El formato de la fecha debe ser ISO8601 (ej: 2024-12-30T21:01:00Z)."}), 400
 
-        # Ajustar si las horas son iguales
+        # 📌 **5. Ajustar si las horas son iguales (evita errores en la consulta)**
         if start_date == end_date:
             start_date += timedelta(seconds=20)
-            end_date -= timedelta(seconds=10)
+            end_date += timedelta(minutes=1)  # Ajustar 1 minuto
 
-        # Limitar el intervalo a 15 minutos
+        # 📌 **6. Limitar el intervalo máximo a 15 minutos**
         if (end_date - start_date) > timedelta(minutes=15):
             end_date = start_date + timedelta(minutes=15)
 
-        # Convertir fecha de inicio al día juliano
-        julian_day = date_to_julian_day(start_date.isoformat())
+        # 📌 **7. Convertir fecha de inicio a día juliano**
+        julian_day = date_to_julian_day(start_date)
         year = start_date.year
 
-        # Construcción de la URL para descargar MiniSEED desde OSSO
-        url = f"http://osso.univalle.edu.co/apps/seiscomp/archive/{year}/{net}/{sta}/{channel}/{net}.{sta}.00.{channel}.{year}.{julian_day}"
+        # 📌 **8. Construcción de la URL para OSSO**
+        osso_url = f"http://osso.univalle.edu.co/apps/seiscomp/archive/{year}/{net}/{sta}/{channel}/{net}.{sta}.00.{channel}.{year}.{julian_day}"
 
-        try:
-            print(f"Descargando datos desde: {url}")
-            response = requests.get(url, stream=True, timeout=120)
+        print(f"🔹 Descargando datos desde: {osso_url}")
 
-            if response.status_code != 200:
-                return jsonify({"error": f"Error {response.status_code} al descargar MiniSEED."}), 500
-            
-            stream = read(io.BytesIO(response.content))
-        except requests.exceptions.RequestException as e:
-            return jsonify({"error": f"Error al descargar MiniSEED: {str(e)}"}), 500
+        # 📌 **9. Descargar los datos MiniSEED**
+        response = requests.get(osso_url, stream=True, timeout=120)
 
-        # Crear variable para la fecha
-        date_str = start_date.strftime('%b-%d-%Y')
+        if response.status_code != 200:
+            return jsonify({"error": f"Error {response.status_code} al descargar MiniSEED."}), 500
+        
+        stream = read(io.BytesIO(response.content))
 
-        # Graficar los datos del sismograma
-        fig, ax = plt.subplots(figsize=(12, 6))
-
-        # Convertir fechas a UTCDateTime de obspy
+        # 📌 **10. Convertir fechas a `UTCDateTime` de obspy**
         start_utc = UTCDateTime(start_date.isoformat() + "Z")
         end_utc = UTCDateTime(end_date.isoformat() + "Z")
 
-        # Recortar los datos al intervalo definido por el usuario
+        # 📌 **11. Recortar los datos**
         stream = stream.slice(starttime=start_utc, endtime=end_utc)
         trace = stream[0]
 
+        # 📌 **12. Graficar el sismograma**
+        fig, ax = plt.subplots(figsize=(12, 6))
         ax.plot(trace.times("matplotlib"), trace.data, label=f"Canal {channel}", linewidth=0.8, color=color)
         ax.set_title(f"Sismograma {channel} ({trace.stats.station})", fontsize=12)
         ax.set_xlabel("Tiempo (HH:MM:SS UTC)", fontsize=10)
@@ -101,30 +97,29 @@ def generate_sismograma():
         ax.legend(loc="upper right")
         ax.grid(True, linestyle="--", alpha=0.7)
 
-        # Formatear el eje X para mostrar tiempos en UTC
+        # 📌 **13. Formatear el eje X para mostrar tiempos en UTC**
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S UTC'))
 
-        # Mostrar el URL asociado debajo del gráfico
-        plt.figtext(0.5, -0.1, f"URL ({channel}): {url}", wrap=True, horizontalalignment='center', fontsize=10, color=color)
-
-        # Mostrar la fecha debajo del sismograma
+        # 📌 **14. Mostrar la fecha en el gráfico**
+        date_str = start_date.strftime('%b-%d-%Y')
         plt.figtext(0.5, -0.05, f"Fecha: {date_str}", wrap=True, horizontalalignment='center', fontsize=12)
 
-        # Guardar la imagen en memoria
+        # 📌 **15. Guardar la imagen en memoria**
         output_image = io.BytesIO()
         plt.savefig(output_image, format='png', bbox_inches="tight")
         output_image.seek(0)
         plt.close(fig)
 
+        # 📌 **16. Enviar la imagen al usuario**
         return send_file(output_image, mimetype='image/png')
 
     except Exception as e:
-        print(f"Error general: {e}")
-        return jsonify({"error": f"Ocurrió un error durante el procesamiento: {str(e)}"}), 500
+        print(f"⚠️ Error general: {e}")
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 10000))  # Obtiene el puerto asignado por Render
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
+
 
 
 
