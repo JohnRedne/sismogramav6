@@ -14,6 +14,7 @@ from obspy import read, UTCDateTime
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from datetime import datetime, timedelta
+from datetime import timezone
 import os
 
 app = Flask(__name__)
@@ -87,17 +88,32 @@ def generate_sismograma():
         # Graficar los datos del sismograma
         fig, ax = plt.subplots(figsize=(12, 6))
 
+        # Convertir fecha recibida a un objeto datetime
+        start_date = datetime.fromisoformat(start_date_input)
+        end_date = datetime.fromisoformat(end_date_input)
+
+        # Asegurar que sea UTC
+        if start_date.tzinfo is None:
+        start_date = start_date.replace(tzinfo=timezone.utc)
+        if end_date.tzinfo is None:
+        end_date = end_date.replace(tzinfo=timezone.utc)
+
+        # Convertir a UTCDateTime (Obspy usa UTC)
+        start_utc = UTCDateTime(start_date)
+        end_utc = UTCDateTime(end_date)
+
         # Convertir fechas de recorte a UTCDateTime
         #start_utc = UTCDateTime(start_date)
         #end_utc = UTCDateTime(end_date)
 
         # Asegurar que start_date y end_date sean naive
-        start_date = start_date.replace(tzinfo=None)
-        end_date = end_date.replace(tzinfo=None)
+        
+        #start_date = start_date.replace(tzinfo=None)
+        #end_date = end_date.replace(tzinfo=None)
 
         # Convertir fechas de recorte a UTCDateTime (obspy usa UTC)
-        start_utc = UTCDateTime(start_date.isoformat() + "Z")
-        end_utc = UTCDateTime(end_date.isoformat() + "Z")
+        #start_utc = UTCDateTime(start_date.isoformat() + "Z")
+        #end_utc = UTCDateTime(end_date.isoformat() + "Z")
 
 
         # Recortar los datos al intervalo definido por el usuario
