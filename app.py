@@ -115,7 +115,8 @@ def generate_sismograma():
         return jsonify({"error": f"Ocurrió un error: {str(e)}"}), 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    port = int(os.environ.get("PORT", 10000))  # Obtiene el puerto asignado por Render
+    app.run(host='0.0.0.0', port=port)
 
 
 
