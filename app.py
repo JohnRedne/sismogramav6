@@ -14,53 +14,43 @@ from obspy import read, UTCDateTime
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from datetime import datetime, timedelta
-from datetime import timezone
 import os
 
 app = Flask(__name__)
 
 # Función para convertir una fecha ISO8601 a día juliano
 def date_to_julian_day(date: str) -> int:
-    """Convierte una fecha ISO8601 al día juliano del año."""
-    dt = datetime.fromisoformat(date)
+    dt = datetime.fromisoformat(date.replace("Z", ""))  # Asegurar que sea UTC
     start_of_year = datetime(dt.year, 1, 1)
-    julian_day = (dt - start_of_year).days + 1
-    return julian_day
+    return (dt - start_of_year).days + 1
 
 @app.route('/generate_sismograma', methods=['GET'])
 def generate_sismograma():
     try:
-        # Obtener parámetros de la solicitud
+        # Obtener parámetros
         start_date_input = request.args.get("start")
         end_date_input = request.args.get("end")
         net = request.args.get("net")
         sta = request.args.get("sta")
-
-        # Canal fijo
         channel = "HNE.D"
-        color = "blue"
 
-        # Validar los parámetros
         if not all([start_date_input, end_date_input, net, sta]):
-            return jsonify({"error": "Faltan parámetros requeridos (start, end, net, sta)."}), 400
+            return jsonify({"error": "Faltan parámetros (start, end, net, sta)."}), 400
 
-        # Validar formato de las fechas
-        try:
-            start_date = datetime.fromisoformat(start_date_input)
-            end_date = datetime.fromisoformat(end_date_input)
-        except ValueError:
-            return jsonify({"error": "El formato de la fecha debe ser ISO8601 (ej: 2024-12-30T21:01:00)."}), 400
+        # Convertir fechas a UTC
+        start_date = datetime.fromisoformat(start_date_input.replace("Z", ""))
+        end_date = datetime.fromisoformat(end_date_input.replace("Z", ""))
 
         # Ajustar si las horas son iguales
         if start_date == end_date:
             start_date += timedelta(seconds=20)
             end_date -= timedelta(seconds=10)
 
-        # Limitar el intervalo a 15 minutos
+        # Limitar a 15 minutos
         if (end_date - start_date) > timedelta(minutes=15):
             end_date = start_date + timedelta(minutes=15)
 
-        # Convertir fecha de inicio al día juliano
+        # Convertir fecha al día juliano
         julian_day = date_to_julian_day(start_date.isoformat())
         year = start_date.year
 
@@ -69,89 +59,54 @@ def generate_sismograma():
 
         try:
             print(f"Descargando datos desde: {url}")
-            # Usamos requests en lugar de urllib para evitar bloqueos
             response = requests.get(url, stream=True, timeout=120)
 
-            # Verificar si la descarga fue exitosa
             if response.status_code != 200:
-                return jsonify({"error": f"Error {response.status_code} al descargar el archivo MiniSEED."}), 500
+                print(f"Error al descargar MiniSEED: {response.status_code}")
+                return jsonify({"error": f"Error {response.status_code} en la descarga."}), 500
             
-            # Leer el archivo MiniSEED desde memoria
             stream = read(io.BytesIO(response.content))
 
         except requests.exceptions.RequestException as e:
-            return jsonify({"error": f"Error en la descarga del archivo MiniSEED: {str(e)}"}), 500
+            return jsonify({"error": f"No se pudo descargar MiniSEED: {str(e)}"}), 500
 
-        # Crear variable para la fecha
-        date_str = start_date.strftime('%b-%d-%Y')
-
-        # Graficar los datos del sismograma
+        # Graficar el sismograma
         fig, ax = plt.subplots(figsize=(12, 6))
 
-        # Convertir fecha recibida a un objeto datetime
-        start_date = datetime.fromisoformat(start_date_input)
-        end_date = datetime.fromisoformat(end_date_input)
-
-        # Asegurar que sea UTC
-        if start_date.tzinfo is None:
-        start_date = start_date.replace(tzinfo=timezone.utc)
-        if end_date.tzinfo is None:
-        end_date = end_date.replace(tzinfo=timezone.utc)
-
-        # Convertir a UTCDateTime (Obspy usa UTC)
-        start_utc = UTCDateTime(start_date)
-        end_utc = UTCDateTime(end_date)
-
         # Convertir fechas de recorte a UTCDateTime
-        #start_utc = UTCDateTime(start_date)
-        #end_utc = UTCDateTime(end_date)
+        start_utc = UTCDateTime(start_date.isoformat() + "Z")
+        end_utc = UTCDateTime(end_date.isoformat() + "Z")
 
-        # Asegurar que start_date y end_date sean naive
-        
-        #start_date = start_date.replace(tzinfo=None)
-        #end_date = end_date.replace(tzinfo=None)
-
-        # Convertir fechas de recorte a UTCDateTime (obspy usa UTC)
-        #start_utc = UTCDateTime(start_date.isoformat() + "Z")
-        #end_utc = UTCDateTime(end_date.isoformat() + "Z")
-
-
-        # Recortar los datos al intervalo definido por el usuario
+        # Recortar datos
         stream = stream.slice(starttime=start_utc, endtime=end_utc)
         trace = stream[0]
 
-        ax.plot(trace.times("matplotlib"), trace.data, label=f"Canal {channel}", linewidth=0.8, color=color)
+        ax.plot(trace.times("matplotlib"), trace.data, label=f"Canal {channel}", linewidth=0.8, color="blue")
         ax.set_title(f"Sismograma {channel} ({trace.stats.station})", fontsize=12)
         ax.set_xlabel("Tiempo (HH:MM:SS UTC)", fontsize=10)
         ax.set_ylabel("Amplitud", fontsize=10)
         ax.legend(loc="upper right")
         ax.grid(True, linestyle="--", alpha=0.7)
-
-        # Formatear el eje X para mostrar tiempos en UTC
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S UTC'))
 
-        # Mostrar el URL asociado debajo del gráfico
-        plt.figtext(0.5, -0.1, f"URL ({channel}): {url}", wrap=True, horizontalalignment='center', fontsize=10, color=color)
-
         # Mostrar la fecha debajo del sismograma
+        date_str = start_date.strftime('%b-%d-%Y')
         plt.figtext(0.5, -0.05, f"Fecha: {date_str}", wrap=True, horizontalalignment='center', fontsize=12)
 
-        # Guardar la imagen en memoria
+        # Guardar la imagen
         output_image = io.BytesIO()
         plt.savefig(output_image, format='png', bbox_inches="tight")
         output_image.seek(0)
         plt.close(fig)
 
-        # Liberar memoria
-        #del response, stream
-
         return send_file(output_image, mimetype='image/png')
 
     except Exception as e:
         print(f"Error general: {e}")
-        return jsonify({"error": f"Ocurrió un error durante el procesamiento: {str(e)}"}), 500
+        return jsonify({"error": f"Ocurrió un error: {str(e)}"}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
+
 
 
