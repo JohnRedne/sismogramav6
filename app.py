@@ -20,10 +20,10 @@ app = Flask(__name__)
 
 # Función para convertir una fecha ISO8601 a día juliano
 def date_to_julian_day(date: str) -> int:
-    """Convierte una fecha ISO8601 al día juliano del año."""
-    dt = datetime.fromisoformat(date.replace("Z", ""))  # Remueve la 'Z' de formato UTC
+    dt = datetime.fromisoformat(date)
     start_of_year = datetime(dt.year, 1, 1)
-    return (dt - start_of_year).days + 1
+    julian_day = (dt - start_of_year).days + 1
+    return julian_day
 
 @app.route('/generate_sismograma', methods=['GET'])
 def generate_sismograma():
@@ -33,17 +33,21 @@ def generate_sismograma():
         end_date_input = request.args.get("end")
         net = request.args.get("net")
         sta = request.args.get("sta")
-
+        
         # Canal fijo
         channel = "HNE.D"
+        color = "blue"
 
         # Validar los parámetros
         if not all([start_date_input, end_date_input, net, sta]):
             return jsonify({"error": "Faltan parámetros requeridos (start, end, net, sta)."}), 400
 
-        # Convertir fechas a UTC
-        start_date = datetime.fromisoformat(start_date_input.replace("Z", ""))
-        end_date = datetime.fromisoformat(end_date_input.replace("Z", ""))
+        # Convertir a datetime y eliminar información de zona horaria
+        try:
+            start_date = datetime.fromisoformat(start_date_input.replace("Z", ""))
+            end_date = datetime.fromisoformat(end_date_input.replace("Z", ""))
+        except ValueError:
+            return jsonify({"error": "El formato de la fecha debe ser ISO8601 (ej: 2024-12-30T21:01:00Z)."}), 400
 
         # Ajustar si las horas son iguales
         if start_date == end_date:
@@ -61,35 +65,32 @@ def generate_sismograma():
         # Construir la URL del archivo MiniSEED
         url = f"http://osso.univalle.edu.co/apps/seiscomp/archive/{year}/{net}/{sta}/{channel}/{net}.{sta}.00.{channel}.{year}.{julian_day}"
 
-        print(f"Descargando datos desde: {url}")
-
-        # Descargar y leer el archivo MiniSEED
         try:
+            print(f"Descargando datos desde: {url}")
             response = requests.get(url, stream=True, timeout=120)
 
             if response.status_code != 200:
-                return jsonify({"error": f"Error {response.status_code} al descargar MiniSEED."}), 500
+                return jsonify({"error": f"Error {response.status_code} al descargar el archivo MiniSEED."}), 500
             
             stream = read(io.BytesIO(response.content))
-
         except requests.exceptions.RequestException as e:
-            return jsonify({"error": f"No se pudo descargar MiniSEED: {str(e)}"}), 500
+            return jsonify({"error": f"Error en la descarga del archivo MiniSEED: {str(e)}"}), 500
 
-        # Crear variable para la fecha en formato Nov-11-2024
+        # Crear variable para la fecha
         date_str = start_date.strftime('%b-%d-%Y')
 
-        # Graficar el sismograma
+        # Graficar los datos del sismograma
         fig, ax = plt.subplots(figsize=(12, 6))
 
-        # Convertir fechas de recorte a UTCDateTime
+        # Convertir fechas a UTCDateTime de obspy
         start_utc = UTCDateTime(start_date.isoformat() + "Z")
         end_utc = UTCDateTime(end_date.isoformat() + "Z")
 
-        # Recortar datos
+        # Recortar los datos al intervalo definido por el usuario
         stream = stream.slice(starttime=start_utc, endtime=end_utc)
         trace = stream[0]
 
-        ax.plot(trace.times("matplotlib"), trace.data, label=f"Canal {channel}", linewidth=0.8, color="blue")
+        ax.plot(trace.times("matplotlib"), trace.data, label=f"Canal {channel}", linewidth=0.8, color=color)
         ax.set_title(f"Sismograma {channel} ({trace.stats.station})", fontsize=12)
         ax.set_xlabel("Tiempo (HH:MM:SS UTC)", fontsize=10)
         ax.set_ylabel("Amplitud", fontsize=10)
@@ -98,6 +99,9 @@ def generate_sismograma():
 
         # Formatear el eje X para mostrar tiempos en UTC
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S UTC'))
+
+        # Mostrar el URL asociado debajo del gráfico
+        plt.figtext(0.5, -0.1, f"URL ({channel}): {url}", wrap=True, horizontalalignment='center', fontsize=10, color=color)
 
         # Mostrar la fecha debajo del sismograma
         plt.figtext(0.5, -0.05, f"Fecha: {date_str}", wrap=True, horizontalalignment='center', fontsize=12)
@@ -112,11 +116,12 @@ def generate_sismograma():
 
     except Exception as e:
         print(f"Error general: {e}")
-        return jsonify({"error": f"Ocurrió un error: {str(e)}"}), 500
+        return jsonify({"error": f"Ocurrió un error durante el procesamiento: {str(e)}"}), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 10000))  # Obtiene el puerto asignado por Render
     app.run(host='0.0.0.0', port=port)
+
 
 
 
