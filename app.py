@@ -20,22 +20,26 @@ app = Flask(__name__)
 
 # Función para convertir una fecha ISO8601 a día juliano
 def date_to_julian_day(date: str) -> int:
-    dt = datetime.fromisoformat(date.replace("Z", ""))  # Asegurar que sea UTC
+    """Convierte una fecha ISO8601 al día juliano del año."""
+    dt = datetime.fromisoformat(date.replace("Z", ""))  # Remueve la 'Z' de formato UTC
     start_of_year = datetime(dt.year, 1, 1)
     return (dt - start_of_year).days + 1
 
 @app.route('/generate_sismograma', methods=['GET'])
 def generate_sismograma():
     try:
-        # Obtener parámetros
+        # Obtener parámetros de la solicitud
         start_date_input = request.args.get("start")
         end_date_input = request.args.get("end")
         net = request.args.get("net")
         sta = request.args.get("sta")
+
+        # Canal fijo
         channel = "HNE.D"
 
+        # Validar los parámetros
         if not all([start_date_input, end_date_input, net, sta]):
-            return jsonify({"error": "Faltan parámetros (start, end, net, sta)."}), 400
+            return jsonify({"error": "Faltan parámetros requeridos (start, end, net, sta)."}), 400
 
         # Convertir fechas a UTC
         start_date = datetime.fromisoformat(start_date_input.replace("Z", ""))
@@ -46,29 +50,33 @@ def generate_sismograma():
             start_date += timedelta(seconds=20)
             end_date -= timedelta(seconds=10)
 
-        # Limitar a 15 minutos
+        # Limitar el intervalo a 15 minutos
         if (end_date - start_date) > timedelta(minutes=15):
             end_date = start_date + timedelta(minutes=15)
 
-        # Convertir fecha al día juliano
+        # Convertir fecha de inicio al día juliano
         julian_day = date_to_julian_day(start_date.isoformat())
         year = start_date.year
 
         # Construir la URL del archivo MiniSEED
         url = f"http://osso.univalle.edu.co/apps/seiscomp/archive/{year}/{net}/{sta}/{channel}/{net}.{sta}.00.{channel}.{year}.{julian_day}"
 
+        print(f"Descargando datos desde: {url}")
+
+        # Descargar y leer el archivo MiniSEED
         try:
-            print(f"Descargando datos desde: {url}")
             response = requests.get(url, stream=True, timeout=120)
 
             if response.status_code != 200:
-                print(f"Error al descargar MiniSEED: {response.status_code}")
-                return jsonify({"error": f"Error {response.status_code} en la descarga."}), 500
+                return jsonify({"error": f"Error {response.status_code} al descargar MiniSEED."}), 500
             
             stream = read(io.BytesIO(response.content))
 
         except requests.exceptions.RequestException as e:
             return jsonify({"error": f"No se pudo descargar MiniSEED: {str(e)}"}), 500
+
+        # Crear variable para la fecha en formato Nov-11-2024
+        date_str = start_date.strftime('%b-%d-%Y')
 
         # Graficar el sismograma
         fig, ax = plt.subplots(figsize=(12, 6))
@@ -87,13 +95,14 @@ def generate_sismograma():
         ax.set_ylabel("Amplitud", fontsize=10)
         ax.legend(loc="upper right")
         ax.grid(True, linestyle="--", alpha=0.7)
+
+        # Formatear el eje X para mostrar tiempos en UTC
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S UTC'))
 
         # Mostrar la fecha debajo del sismograma
-        date_str = start_date.strftime('%b-%d-%Y')
         plt.figtext(0.5, -0.05, f"Fecha: {date_str}", wrap=True, horizontalalignment='center', fontsize=12)
 
-        # Guardar la imagen
+        # Guardar la imagen en memoria
         output_image = io.BytesIO()
         plt.savefig(output_image, format='png', bbox_inches="tight")
         output_image.seek(0)
