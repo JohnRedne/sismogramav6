@@ -18,41 +18,40 @@ import os
 
 app = Flask(__name__)
 
-# Función para convertir una fecha ISO8601 a día juliano
+# Función para convertir fecha a día juliano
 def date_to_julian_day(date: str) -> int:
     dt = datetime.fromisoformat(date)
     start_of_year = datetime(dt.year, 1, 1)
     julian_day = (dt - start_of_year).days + 1
     return julian_day
 
-# Ruta raíz para verificar si el backend está activo
 @app.route('/')
 def home():
-    return jsonify({"message": "El backend está funcionando"}), 200
+    return jsonify({"message": "El backend está funcionando correctamente"}), 200
 
 @app.route('/generate_sismograma', methods=['GET'])
 def generate_sismograma():
     try:
-        # Obtener parámetros de la solicitud
+        # Obtener los parámetros de la solicitud
         start_date_input = request.args.get("start")
         end_date_input = request.args.get("end")
         net = request.args.get("net")
         sta = request.args.get("sta")
 
-        # Canal fijo
+        # Canal fijo (por ahora)
         channel = "HNE.D"
         color = "blue"
 
-        # Validar los parámetros
+        # Validar que todos los parámetros estén presentes
         if not all([start_date_input, end_date_input, net, sta]):
             return jsonify({"error": "Faltan parámetros requeridos (start, end, net, sta)."}), 400
 
-        # Convertir a datetime y eliminar información de zona horaria
+        # Convertir a datetime y eliminar información de zona horaria (quitar 'Z')
         try:
             start_date = datetime.fromisoformat(start_date_input.replace("Z", ""))
             end_date = datetime.fromisoformat(end_date_input.replace("Z", ""))
         except ValueError:
-            return jsonify({"error": "El formato de la fecha debe ser ISO8601 (ej: 2024-12-30T21:01:00Z)."}), 400
+            return jsonify({"error": "Formato incorrecto de fecha (usar ISO8601)."}), 400
 
         # Ajustar si las horas son iguales
         if start_date == end_date:
@@ -67,7 +66,7 @@ def generate_sismograma():
         julian_day = date_to_julian_day(start_date.isoformat())
         year = start_date.year
 
-        # Construir la URL del archivo MiniSEED
+        # Construcción de la URL para descargar MiniSEED desde OSSO
         url = f"http://osso.univalle.edu.co/apps/seiscomp/archive/{year}/{net}/{sta}/{channel}/{net}.{sta}.00.{channel}.{year}.{julian_day}"
 
         try:
@@ -75,11 +74,11 @@ def generate_sismograma():
             response = requests.get(url, stream=True, timeout=120)
 
             if response.status_code != 200:
-                return jsonify({"error": f"Error {response.status_code} al descargar el archivo MiniSEED."}), 500
+                return jsonify({"error": f"Error {response.status_code} al descargar MiniSEED."}), 500
             
             stream = read(io.BytesIO(response.content))
         except requests.exceptions.RequestException as e:
-            return jsonify({"error": f"Error en la descarga del archivo MiniSEED: {str(e)}"}), 500
+            return jsonify({"error": f"Error al descargar MiniSEED: {str(e)}"}), 500
 
         # Crear variable para la fecha
         date_str = start_date.strftime('%b-%d-%Y')
@@ -126,6 +125,7 @@ def generate_sismograma():
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 10000))  # Obtiene el puerto asignado por Render
     app.run(host='0.0.0.0', port=port)
+
 
 
 
