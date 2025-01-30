@@ -143,7 +143,7 @@ def generate_sismograma():
         plt.close(fig)
 
         # Liberar memoria
-        del response, stream
+        #del response, stream
 
         return send_file(output_image, mimetype='image/png')
 
