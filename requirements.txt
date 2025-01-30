@@ -1,7 +1,7 @@
-Flask
-obspy
-requests
-matplotlib
-gunicorn
+Flask==2.2.3
+obspy==1.4.0
+requests==2.31.0
+matplotlib==3.8.0
+gunicorn==23.0.0
 flask-cors
 
