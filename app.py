@@ -15,8 +15,10 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from datetime import datetime, timedelta
 import os
+from flask_cors import CORS  # Habilitar CORS para evitar bloqueos en Flutter
 
 app = Flask(__name__)
+CORS(app)  # 🔹 Permitir solicitudes desde cualquier origen (Flutter)
 
 # 🔹 **Función para convertir una fecha en día juliano**
 def date_to_julian_day(date: datetime) -> int:
@@ -73,12 +75,20 @@ def generate_sismograma():
         print(f"🔹 Descargando datos desde: {osso_url}")
 
         # 📌 **9. Descargar los datos MiniSEED**
-        response = requests.get(osso_url, stream=True, timeout=120)
+        try:
+            response = requests.get(osso_url, stream=True, timeout=10)
 
-        if response.status_code != 200:
-            return jsonify({"error": f"Error {response.status_code} al descargar MiniSEED."}), 500
-        
-        stream = read(io.BytesIO(response.content))
+            if response.status_code != 200:
+                print(f" Error {response.status_code} al descargar MiniSEED")
+                return jsonify({"error": f"Error {response.status_code} al descargar MiniSEED."}), 500
+            
+            stream = read(io.BytesIO(response.content))
+        except requests.exceptions.Timeout:
+            print(" La solicitud a OSSO tardó demasiado y fue cancelada.")
+            return jsonify({"error": "La solicitud a OSSO tardó demasiado."}), 504
+        except requests.exceptions.RequestException as e:
+            print(f" Error en la solicitud a OSSO: {e}")
+            return jsonify({"error": f"Error en la solicitud a OSSO: {str(e)}"}), 500
 
         # 📌 **10. Convertir fechas a `UTCDateTime` de obspy**
         start_utc = UTCDateTime(start_date.isoformat() + "Z")
@@ -117,8 +127,11 @@ def generate_sismograma():
         print(f"⚠️ Error general: {e}")
         return jsonify({"error": str(e)}), 500
 
+# 🔹 **Ejecución en Google Cloud Run**
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
+    port = int(os.environ.get("PORT", 8080))  # Cloud Run usa el puerto 8080 por defecto
+    app.run(host='0.0.0.0', port=port)
+
 
 
 
