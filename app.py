@@ -25,6 +25,11 @@ def date_to_julian_day(date: str) -> int:
     julian_day = (dt - start_of_year).days + 1
     return julian_day
 
+# Ruta raíz para verificar si el backend está activo
+@app.route('/')
+def home():
+    return jsonify({"message": "El backend está funcionando"}), 200
+
 @app.route('/generate_sismograma', methods=['GET'])
 def generate_sismograma():
     try:
@@ -33,7 +38,7 @@ def generate_sismograma():
         end_date_input = request.args.get("end")
         net = request.args.get("net")
         sta = request.args.get("sta")
-        
+
         # Canal fijo
         channel = "HNE.D"
         color = "blue"
