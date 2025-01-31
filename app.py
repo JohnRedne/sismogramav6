@@ -76,7 +76,7 @@ def generate_sismograma():
 
         # 📌 **9. Descargar los datos MiniSEED**
         try:
-            response = requests.get(osso_url, stream=True, timeout=10)
+            response = requests.get(osso_url, stream=True, timeout=500)
 
             if response.status_code != 200:
                 print(f" Error {response.status_code} al descargar MiniSEED")
