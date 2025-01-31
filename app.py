@@ -81,7 +81,8 @@ def generate_sismograma():
             if response.status_code != 200:
                 print(f" Error {response.status_code} al descargar MiniSEED")
                 return jsonify({"error": f"Error {response.status_code} al descargar MiniSEED."}), 500
-            
+
+            # 📌 **10. Procesamiento del archivo MiniSEED**
             stream = read(io.BytesIO(response.content))
         except requests.exceptions.Timeout:
             print(" La solicitud a OSSO tardó demasiado y fue cancelada.")
@@ -90,15 +91,15 @@ def generate_sismograma():
             print(f" Error en la solicitud a OSSO: {e}")
             return jsonify({"error": f"Error en la solicitud a OSSO: {str(e)}"}), 500
 
-        # 📌 **10. Convertir fechas a `UTCDateTime` de obspy**
+        # 📌 **11. Convertir fechas a `UTCDateTime` de obspy**
         start_utc = UTCDateTime(start_date.isoformat() + "Z")
         end_utc = UTCDateTime(end_date.isoformat() + "Z")
 
-        # 📌 **11. Recortar los datos**
+        # 📌 **12. Recortar los datos**
         stream = stream.slice(starttime=start_utc, endtime=end_utc)
         trace = stream[0]
 
-        # 📌 **12. Graficar el sismograma**
+        # 📌 **13. Graficar el sismograma**
         fig, ax = plt.subplots(figsize=(12, 6))
         ax.plot(trace.times("matplotlib"), trace.data, label=f"Canal {channel}", linewidth=0.8, color=color)
         ax.set_title(f"Sismograma {channel} ({trace.stats.station})", fontsize=12)
@@ -107,20 +108,20 @@ def generate_sismograma():
         ax.legend(loc="upper right")
         ax.grid(True, linestyle="--", alpha=0.7)
 
-        # 📌 **13. Formatear el eje X para mostrar tiempos en UTC**
+        # 📌 **14. Formatear el eje X para mostrar tiempos en UTC**
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S UTC'))
 
-        # 📌 **14. Mostrar la fecha en el gráfico**
+        # 📌 **15. Mostrar la fecha en el gráfico**
         date_str = start_date.strftime('%b-%d-%Y')
         plt.figtext(0.5, -0.05, f"Fecha: {date_str}", wrap=True, horizontalalignment='center', fontsize=12)
 
-        # 📌 **15. Guardar la imagen en memoria**
+        # 📌 **16. Guardar la imagen en memoria**
         output_image = io.BytesIO()
         plt.savefig(output_image, format='png', bbox_inches="tight")
         output_image.seek(0)
         plt.close(fig)
 
-        # 📌 **16. Enviar la imagen al usuario**
+        # 📌 **17. Enviar la imagen al usuario**
         return send_file(output_image, mimetype='image/png')
 
     except Exception as e:
@@ -131,6 +132,7 @@ def generate_sismograma():
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8080))  # Cloud Run usa el puerto 8080 por defecto
     app.run(host='0.0.0.0', port=port)
+
 
 
 
