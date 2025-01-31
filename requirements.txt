@@ -3,5 +3,6 @@ obspy==1.4.0
 requests==2.31.0
 matplotlib==3.8.0
 gunicorn==23.0.0
+werkzeug==2.1.0
 flask-cors
 
